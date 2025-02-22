@@ -1,161 +1,416 @@
 name: ci/build
-
 on:
   push:
-  pull_request:
-    paths-ignore:
-      - docs/**
-      - "**/README.md"
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build_conda:
-    name: conda (${{ matrix.os }}, ${{ matrix.backend }})
-    runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash -el {0}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ["ubuntu-latest", "macos-latest", "windows-latest"]
-        backend: ["nvidia", "cpu"]
-        include:
-          - os: "ubuntu-latest"
-            backend: "rocm"
-          - os: "windows-latest"
-            backend: "directml"
+    name: conda (${{ matrix.os }}, ${{ matrix.backend }})
+    runs-on: ${{ matrix.os }}
     steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: start-measurement
       - uses: actions/checkout@v3
       - name: Set cache date
         run: echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
-      - name: Cache conda
-        uses: actions/cache@v3
-        env:
-          # Increase this value to manually reset cache
+      - id: measurement-3
+        name: Record Measurement After Set cache date
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Set cache date
+          task: get-measurement
+      - env:
           CACHE_NUMBER: 1
           REQ_FILE: ./requirements/requirements_${{ matrix.backend }}.txt
+        name: Cache conda
+        uses: actions/cache@v3
         with:
+          key:
+            ${{ runner.os }}-${{ matrix.backend }}-conda-${{ env.CACHE_NUMBER }}-${{
+            env.DATE }}-${{ hashFiles('./requirements/requirements.txt', env.REQ_FILE)
+            }}
           path: ~/conda_pkgs_dir
-          key: ${{ runner.os }}-${{ matrix.backend }}-conda-${{ env.CACHE_NUMBER }}-${{ env.DATE }}-${{ hashFiles('./requirements/requirements.txt', env.REQ_FILE) }}
       - name: Set up Conda
         uses: conda-incubator/setup-miniconda@v2
         with:
-          python-version: "3.10"
-          auto-update-conda: true
           activate-environment: faceswap
+          auto-update-conda: true
+          python-version: "3.10"
       - name: Conda info
         run: conda info && conda list
+      - id: measurement-7
+        name: Record Measurement After Conda info
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Conda info
+          task: get-measurement
       - name: Install
-        run: |
-          python setup.py --installer --${{ matrix.backend }}
+        run: "python setup.py --installer --${{ matrix.backend }}
+
           pip install flake8 pylint mypy pytest pytest-mock wheel pytest-xvfb
-          pip install types-attrs types-cryptography types-pyOpenSSL types-PyYAML types-setuptools
+
+          pip install types-attrs types-cryptography types-pyOpenSSL types-PyYAML
+          types-setuptools
+
+          "
+      - id: measurement-9
+        name: Record Measurement After Install
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Install
+          task: get-measurement
       - name: Lint with flake8
-        run: |
-          # stop the build if there are Python syntax errors or undefined names
+        run:
+          "# stop the build if there are Python syntax errors or undefined names
+
           flake8 . --select=E9,F63,F7,F82 --show-source
+
           flake8 . --exit-zero
-      - name: MyPy Typing
-        continue-on-error: true
-        run: |
-          mypy .
+
+          "
+      - id: measurement-11
+        name: Record Measurement After Lint with flake8
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Lint with flake8
+          task: get-measurement
+      - continue-on-error: true
+        name: MyPy Typing
+        run: "mypy .
+
+          "
+      - id: measurement-13
+        name: Record Measurement After MyPy Typing
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: MyPy Typing
+          task: get-measurement
       - name: SysInfo
         run: python -c "from lib.sysinfo import sysinfo ;  print(sysinfo)"
-      - name: Simple Tests
-        # These backends will fail as GPU drivers not available
-        if: matrix.backend != 'rocm' && matrix.backend != 'nvidia' && matrix.backend != 'directml'
-        run: |
-          FACESWAP_BACKEND="${{ matrix.backend }}" py.test -v tests/;
-      - name: End to End Tests
-        # These backends will fail as GPU drivers not available
-        # macOS fails on first extract test with 'died with <Signals.SIGSEGV: 11>'
-        if: matrix.backend != 'rocm' && matrix.backend != 'nvidia' && matrix.backend != 'directml' && matrix.os != 'macos-latest'
-        run: |
-          FACESWAP_BACKEND="${{ matrix.backend }}" python tests/simple_tests.py;
+      - id: measurement-15
+        name: Record Measurement After SysInfo
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: SysInfo
+          task: get-measurement
+      - if:
+          matrix.backend != 'rocm' && matrix.backend != 'nvidia' && matrix.backend
+          != 'directml'
+        name: Simple Tests
+        run: 'FACESWAP_BACKEND="${{ matrix.backend }}" py.test -v tests/;
 
+          '
+      - id: measurement-17
+        name: Record Measurement After Simple Tests
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Simple Tests
+          task: get-measurement
+      - if:
+          matrix.backend != 'rocm' && matrix.backend != 'nvidia' && matrix.backend
+          != 'directml' && matrix.os != 'macos-latest'
+        name: End to End Tests
+        run:
+          'FACESWAP_BACKEND="${{ matrix.backend }}" python tests/simple_tests.py;
+
+          '
+      - id: measurement-19
+        name: Record Measurement After End to End Tests
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: End to End Tests
+          task: get-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run:
+          echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption-${{
+          github.run_id }}.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption
+          path: total_energy_consumption-${{ github.run_id }}.json
+    strategy:
+      fail-fast: false
+      matrix:
+        backend:
+          - nvidia
+          - cpu
+        include:
+          - backend: rocm
+            os: ubuntu-latest
+          - backend: directml
+            os: windows-latest
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
   build_linux:
-    name: "pip (ubuntu-latest, ${{ matrix.backend }})"
+    name: pip (ubuntu-latest, ${{ matrix.backend }})
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10"]
-        backend: ["cpu"]
-        include:
-          - backend: "cpu"
     steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: start-measurement
       - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
         with:
+          cache: pip
+          cache-dependency-path: ./requirements/requirements_${{ matrix.backend }}.txt
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-          cache-dependency-path: './requirements/requirements_${{ matrix.backend }}.txt'
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install flake8 pylint mypy pytest pytest-mock pytest-xvfb wheel
-          pip install types-attrs types-cryptography types-pyOpenSSL types-PyYAML types-setuptools
-          pip install -r ./requirements/requirements_${{ matrix.backend }}.txt
-      - name: List installed packages
-        run: pip freeze
-      - name: Lint with flake8
-        run: |
-          # stop the build if there are Python syntax errors or undefined names
-          flake8 . --select=E9,F63,F7,F82 --show-source
-          # exit-zero treats all errors as warnings.
-          flake8 . --exit-zero
-      - name: MyPy Typing
-        continue-on-error: true
-        run: |
-          mypy .
-      - name: Simple Tests
-        run: |
-          FACESWAP_BACKEND="${{ matrix.backend }}" py.test -v tests/;
-      - name: End to End Tests
-        run: |
-          FACESWAP_BACKEND="${{ matrix.backend }}" python tests/simple_tests.py;
+        run: "python -m pip install --upgrade pip
 
-  build_windows:
-    name: "pip (windows-latest, ${{ matrix.backend }})"
-    runs-on: windows-latest
+          pip install flake8 pylint mypy pytest pytest-mock pytest-xvfb wheel
+
+          pip install types-attrs types-cryptography types-pyOpenSSL types-PyYAML
+          types-setuptools
+
+          pip install -r ./requirements/requirements_${{ matrix.backend }}.txt
+
+          "
+      - id: measurement-4
+        name: Record Measurement After Install dependencies
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Install dependencies
+          task: get-measurement
+      - name: List installed packages
+        run: pip freeze
+      - id: measurement-6
+        name: Record Measurement After List installed packages
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: List installed packages
+          task: get-measurement
+      - name: Lint with flake8
+        run:
+          "# stop the build if there are Python syntax errors or undefined names
+
+          flake8 . --select=E9,F63,F7,F82 --show-source
+
+          # exit-zero treats all errors as warnings.
+
+          flake8 . --exit-zero
+
+          "
+      - id: measurement-8
+        name: Record Measurement After Lint with flake8
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Lint with flake8
+          task: get-measurement
+      - continue-on-error: true
+        name: MyPy Typing
+        run: "mypy .
+
+          "
+      - id: measurement-10
+        name: Record Measurement After MyPy Typing
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: MyPy Typing
+          task: get-measurement
+      - name: Simple Tests
+        run: 'FACESWAP_BACKEND="${{ matrix.backend }}" py.test -v tests/;
+
+          '
+      - id: measurement-12
+        name: Record Measurement After Simple Tests
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Simple Tests
+          task: get-measurement
+      - name: End to End Tests
+        run:
+          'FACESWAP_BACKEND="${{ matrix.backend }}" python tests/simple_tests.py;
+
+          '
+      - id: measurement-14
+        name: Record Measurement After End to End Tests
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: End to End Tests
+          task: get-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run:
+          echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption-${{
+          github.run_id }}.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption
+          path: total_energy_consumption-${{ github.run_id }}.json
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10"]
-        backend: ["cpu", "directml"]
+        backend:
+          - cpu
         include:
-          - backend: "cpu"
-          - backend: "directml"
+          - backend: cpu
+        python-version:
+          - "3.10"
+  build_windows:
+    name: pip (windows-latest, ${{ matrix.backend }})
+    runs-on: windows-latest
     steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: start-measurement
       - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
         with:
+          cache: pip
+          cache-dependency-path: ./requirements/requirements_${{ matrix.backend }}.txt
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-          cache-dependency-path: './requirements/requirements_${{ matrix.backend }}.txt'
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
+        run: "python -m pip install --upgrade pip
+
           pip install flake8 pylint mypy pytest pytest-mock wheel
-          pip install types-attrs types-cryptography types-pyOpenSSL types-PyYAML types-setuptools
+
+          pip install types-attrs types-cryptography types-pyOpenSSL types-PyYAML
+          types-setuptools
+
           pip install -r ./requirements/requirements_${{ matrix.backend }}.txt
+
+          "
+      - id: measurement-4
+        name: Record Measurement After Install dependencies
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Install dependencies
+          task: get-measurement
       - name: List installed packages
         run: pip freeze
+      - id: measurement-6
+        name: Record Measurement After List installed packages
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: List installed packages
+          task: get-measurement
       - name: Set Backend EnvVar
-        run: echo "FACESWAP_BACKEND=${{ matrix.backend }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+        run:
+          echo "FACESWAP_BACKEND=${{ matrix.backend }}" | Out-File -FilePath $env:GITHUB_ENV
+          -Append
+      - id: measurement-8
+        name: Record Measurement After Set Backend EnvVar
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Set Backend EnvVar
+          task: get-measurement
       - name: Lint with flake8
-        run: |
-          # stop the build if there are Python syntax errors or undefined names
+        run:
+          "# stop the build if there are Python syntax errors or undefined names
+
           flake8 . --select=E9,F63,F7,F82 --show-source
+
           # exit-zero treats all errors as warnings.
+
           flake8 . --exit-zero
-      - name: MyPy Typing
-        continue-on-error: true
-        run: |
-          mypy .
+
+          "
+      - id: measurement-10
+        name: Record Measurement After Lint with flake8
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Lint with flake8
+          task: get-measurement
+      - continue-on-error: true
+        name: MyPy Typing
+        run: "mypy .
+
+          "
+      - id: measurement-12
+        name: Record Measurement After MyPy Typing
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: MyPy Typing
+          task: get-measurement
       - name: Simple Tests
         run: py.test -v tests
+      - id: measurement-14
+        name: Record Measurement After Simple Tests
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Simple Tests
+          task: get-measurement
       - name: End to End Tests
         run: python tests/simple_tests.py
+      - id: measurement-16
+        name: Record Measurement After End to End Tests
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: End to End Tests
+          task: get-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run:
+          echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption-${{
+          github.run_id }}.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption
+          path: total_energy_consumption-${{ github.run_id }}.json
+    strategy:
+      fail-fast: false
+      matrix:
+        backend:
+          - cpu
+          - directml
+        include:
+          - backend: cpu
+          - backend: directml
+        python-version:
+          - "3.10"
