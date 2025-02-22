@@ -24,7 +24,7 @@ backend_type: T.TypeAlias = T.Literal['nvidia', 'apple_silicon', 'directml', 'cp
 
 _INSTALL_FAILED = False
 # Packages that are explicitly required for setup.py
-_INSTALLER_REQUIREMENTS: list[tuple[str, str]] = [("pexpect>=4.8.0", "!Windows"),
+_INSTALLER_REQUIREMENTS: list[tuple[str, str]] = [("pexpect==4.8.0", "!Windows"),
                                                   ("pywinpty==2.0.2", "Windows")]
 # Conda packages that are required for a specific backend
 # TODO zlib-wapi is required on some Windows installs where cuDNN complains:
